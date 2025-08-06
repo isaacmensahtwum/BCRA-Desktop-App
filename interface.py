@@ -1,6 +1,6 @@
 import tkinter as tk
-from tkinter import messagebox
-from PIL import Image, ImageTk  # For ribbon logo image
+from tkinter import ttk, messagebox
+from PIL import Image, ImageTk
 
 # ==== Requirement explanations ====
 REQUIREMENTS_INFO = {
@@ -14,7 +14,7 @@ REQUIREMENTS_INFO = {
 }
 
 PINK = "#E75480"  # Breast cancer pink
-BLUE_LINK = "#007BFF"  # Blue for clickable requirement links
+BLUE_LINK = "#007BFF"  # Blue clickable links
 
 # ==== Show explanation popups ====
 def show_info(requirement):
@@ -27,23 +27,13 @@ def generate_report():
 def login_action():
     messagebox.showinfo("Login", "Login functionality will be implemented later.")
 
-# ==== Rounded clickable button ====
-def create_rounded_button(parent, text, command=None, bg=PINK, fg="white", width=18, height=2):
-    btn = tk.Button(
-        parent,
-        text=text,
-        bg=bg,
-        fg=fg,
-        activebackground=bg,
-        activeforeground=fg,
-        relief="flat",
-        font=("Arial", 11, "bold"),
-        command=command,
-        bd=0,
-        highlightthickness=0,
-        cursor="hand2"
-    )
-    btn.pack(pady=5, ipadx=5, ipady=2)
+# ==== Create styled button ====
+def create_styled_button(parent, text, style_name, command=None, fill_x=True):
+    btn = ttk.Button(parent, text=text, style=style_name, command=command)
+    if fill_x:
+        btn.pack(pady=5, ipadx=5, ipady=2, fill="x")
+    else:
+        btn.pack(pady=5, ipadx=10, ipady=5)  # Only wrap around text
     return btn
 
 # ==== Modern frame with pink header ====
@@ -73,13 +63,55 @@ def create_app():
     root = tk.Tk()
     root.title("Breast Cancer Risk Assessment")
     root.geometry("1200x750")
-    root.configure(bg="#f4f6f8")  # Light gray background
+    root.configure(bg="#f4f6f8")
+
+    # ==== Force ttk to use "clam" theme so background colors work ====
+    style = ttk.Style()
+    style.theme_use("clam")
+
+    # Pink button (selected for top buttons like BCRA)
+    style.configure(
+        "Pink.TButton",
+        background=PINK,
+        foreground="black",
+        font=("Arial", 11, "bold"),
+        borderwidth=1,
+        focusthickness=3,
+        focuscolor="none"
+    )
+    style.map("Pink.TButton",
+              background=[("active", PINK)],
+              foreground=[("active", "black")])
+
+    # White button (default)
+    style.configure(
+        "White.TButton",
+        background="white",
+        foreground="black",
+        font=("Arial", 11, "bold"),
+        borderwidth=1,
+        relief="solid"
+    )
+    style.map("White.TButton",
+              background=[("active", "#f0f0f0")])
+
+    # Pink Filled Button for Generate Report (white text)
+    style.configure(
+        "PinkFilled.TButton",
+        background=PINK,
+        foreground="white",
+        font=("Arial", 12, "bold"),
+        borderwidth=1
+    )
+    style.map("PinkFilled.TButton",
+              background=[("active", PINK)],
+              foreground=[("active", "white")])
 
     # ==== Title bar ====
     title_bar = tk.Frame(root, bg=PINK, pady=10)
     title_bar.pack(fill="x")
 
-    # Load ribbon logo
+    # Logo
     try:
         logo_img = Image.open("breast_cancer_logo.png")
         logo_img = logo_img.resize((40, 40), Image.LANCZOS)
@@ -90,7 +122,7 @@ def create_app():
     except FileNotFoundError:
         print("Logo image 'breast_cancer_logo.png' not found.")
 
-    # Title label centered
+    # Title centered
     title_label = tk.Label(
         title_bar,
         text="Breast Cancer Risk Assessment",
@@ -101,17 +133,11 @@ def create_app():
     title_label.pack(side="left", expand=True)
 
     # Login button
-    tk.Button(
+    ttk.Button(
         title_bar,
         text="Login",
-        command=login_action,
-        bg="white",
-        fg=PINK,
-        font=("Arial", 10, "bold"),
-        relief="flat",
-        padx=10,
-        pady=2,
-        cursor="hand2"
+        style="White.TButton",
+        command=login_action
     ).pack(side="right", padx=20)
 
     # ==== Top section ====
@@ -119,18 +145,15 @@ def create_app():
     top_frame.pack(fill="x", padx=20)
 
     for frame_name, buttons in [
-        ("Risk Calculator", ["BCRA >", "Tyrer-Cuzick", "BOADICEA"]),
-        ("Data Source", ["Connect to DB", "Load Excel", "Load CSV"]),
-        ("Decision Support", ["Model Comparison", "Report", "Guidelines"])
+        ("Risk Calculator", [("BCRA", "Pink.TButton"), ("Tyrer-Cuzick", "White.TButton"), ("BOADICEA", "White.TButton")]),
+        ("Data Source", [("Connect to DB", "White.TButton"), ("Load Excel", "White.TButton"), ("Load CSV", "White.TButton")]),
+        ("Decision Support", [("Model Comparison", "White.TButton"), ("Report", "White.TButton"), ("Guidelines", "White.TButton")])
     ]:
         lf, lf_content = create_modern_frame(top_frame, frame_name)
         lf.pack(side="left", expand=True, fill="both", padx=5)
 
-        for btn in buttons:
-            if "BCRA" in btn:
-                create_rounded_button(lf_content, btn, bg=PINK, fg="white")
-            else:
-                create_rounded_button(lf_content, btn, bg="white", fg="black")
+        for btn_text, btn_style in buttons:
+            create_styled_button(lf_content, btn_text, btn_style)
 
     # ==== Bottom section ====
     bottom_frame = tk.Frame(root, bg="#f4f6f8", pady=15)
@@ -144,7 +167,7 @@ def create_app():
         link = tk.Label(
             req_content,
             text=req,
-            fg=BLUE_LINK,  # Blue clickable text
+            fg=BLUE_LINK,
             cursor="hand2",
             bg="white",
             font=("Arial", 12, "underline")
@@ -153,7 +176,7 @@ def create_app():
         link.bind("<Button-1>", lambda e, r=req: show_info(r))
 
     # 5-Year Risk placeholder
-    risk_frame, risk_content = create_modern_frame(bottom_frame, "5-Year Risk")
+    risk_frame, risk_content = create_modern_frame(bottom_frame, "Risk Chart")
     risk_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
     tk.Label(
@@ -165,18 +188,16 @@ def create_app():
         justify="center"
     ).pack(expand=True)
 
-    # Generate Report button at bottom center
+    # Generate Report button (pink filled with white text)
     action_frame = tk.Frame(root, bg="#f4f6f8", pady=20)
     action_frame.pack(fill="x")
 
-    create_rounded_button(
+    create_styled_button(
         action_frame,
         "Generate Report",
+        "PinkFilled.TButton",
         command=generate_report,
-        bg=PINK,
-        fg="white",
-        width=25,
-        height=2
+        fill_x=False  # Wrap to text size
     )
 
     root.mainloop()
