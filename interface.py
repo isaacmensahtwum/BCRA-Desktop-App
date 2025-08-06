@@ -3,9 +3,14 @@ from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk
 import pandas as pd
 import db
-import bcra  # Gail model logic
+import bcra
+from fpdf import FPDF
+from textwrap import wrap
 
-# ==== Column mapping (real data -> display name) ====
+PINK = "#E75480"
+BLUE_LINK = "#007BFF"
+
+# Columns mapping
 COLUMN_MAPPING = {
     "T1": "Age",
     "N_Biop": "Biopsies",
@@ -18,15 +23,15 @@ COLUMN_MAPPING = {
     "Lifetime_Risk": "Lifetime Risk"
 }
 
-PINK = "#E75480"
-BLUE_LINK = "#007BFF"
+REMOVE_COLS = ["T2", "T3", "Race"]  # columns to drop
 
-# Global variables
+# Global vars
 current_df = None
+display_df = None
 tree = None
-summary_labels = {}
+summary_frame_content = None
 
-# ==== Show explanation popups ====
+# ==== Requirement Explanations ====
 REQUIREMENTS_INFO = {
     "Age": "The patient's current age in years.",
     "Biopsies": "Number of prior breast biopsies the patient has had.",
@@ -37,35 +42,119 @@ REQUIREMENTS_INFO = {
     "Race": "The patient's self-identified race."
 }
 
-def show_info(requirement):
-    messagebox.showinfo(requirement, REQUIREMENTS_INFO.get(requirement, "No info available."))
+# ==== Filter & Rename Data ====
+def filter_and_rename(df):
+    df_filtered = df.drop(columns=[c for c in REMOVE_COLS if c in df.columns], errors="ignore")
+    df_filtered = df_filtered.rename(columns={"T1": "Age"})
+    return df_filtered
 
-# ==== Update patient summary ====
+# ==== Show placeholder in summary ====
+def show_summary_placeholder():
+    for widget in summary_frame_content.winfo_children():
+        widget.destroy()
+    tk.Label(
+        summary_frame_content,
+        text="Select a patient to see summary",
+        bg="white",
+        font=("Arial", 12, "italic"),
+        fg="gray"
+    ).pack(expand=True)
+
+# ==== Show patient details in summary ====
+def show_patient_details(patient_data):
+    for widget in summary_frame_content.winfo_children():
+        widget.destroy()
+    for col, value in patient_data.items():
+        tk.Label(summary_frame_content, text=f"{col}: {value}", bg="white", font=("Arial", 11)).pack(anchor="w", pady=2)
+
+# ==== Update summary ====
 def update_patient_summary(event=None):
-    if tree is None or current_df is None:
+    if tree is None or display_df is None:
         return
-
     selected_item = tree.selection()
     if not selected_item:
         return
-
     values = tree.item(selected_item[0], "values")
-    if not values:
+    patient_data = dict(zip(display_df.columns, values))
+    show_patient_details(patient_data)
+
+# ==== Double-click popup ====
+def on_double_click(event=None):
+    if tree is None or display_df is None:
         return
+    selected_item = tree.selection()
+    if not selected_item:
+        return
+    values = tree.item(selected_item[0], "values")
+    patient_data = dict(zip(display_df.columns, values))
 
-    patient_data = dict(zip(current_df.columns, values))
+    popup = tk.Toplevel()
+    popup.title("Patient Profile")
+    popup.geometry("400x500")
+    popup.configure(bg="white")
 
-    # Update labels based on mapping
-    for col, display_name in COLUMN_MAPPING.items():
-        value = patient_data.get(col, "N/A")
-        summary_labels[display_name].config(text=f"{display_name}: {value}")
+    # Header
+    tk.Label(
+        popup, text="Patient Profile", font=("Arial", 16, "bold"),
+        bg=PINK, fg="white", pady=10
+    ).pack(fill="x")
+
+    content_frame = tk.Frame(popup, bg="white", padx=15, pady=15)
+    content_frame.pack(fill="both", expand=True)
+
+    # Grouped sections
+    def add_section(title, fields):
+        tk.Label(content_frame, text=title, bg="white", fg=PINK, font=("Arial", 12, "bold")).pack(anchor="w", pady=(10, 2))
+        for field in fields:
+            if field in patient_data:
+                tk.Label(content_frame, text=f"{field}: {patient_data[field]}", bg="white").pack(anchor="w")
+
+    add_section("Demographics", ["Age", "Race"])
+    add_section("Clinical History", ["Biopsies", "Hyperplasia", "Menarche", "First Live Birth", "First Degree Relatives"])
+    add_section("Risk Assessment", ["Five Year Risk", "Lifetime Risk"])
+
+    # Save functions
+    def save_excel():
+        file = filedialog.asksaveasfilename(defaultextension=".xlsx")
+        if file:
+            pd.DataFrame([patient_data]).to_excel(file, index=False)
+
+    def save_csv():
+        file = filedialog.asksaveasfilename(defaultextension=".csv")
+        if file:
+            pd.DataFrame([patient_data]).to_csv(file, index=False)
+
+    def save_pdf():
+        file = filedialog.asksaveasfilename(defaultextension=".pdf")
+        if file:
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", "B", 14)
+            pdf.cell(0, 10, "Patient Profile", ln=True, align="C")
+            pdf.set_font("Arial", "", 12)
+            for k, v in patient_data.items():
+                pdf.cell(0, 8, f"{k}: {v}", ln=True)
+            pdf.output(file)
+
+    def push_db():
+        try:
+            conns, cursor = db.setup_dbs()
+            cursor.execute("INSERT INTO [bcra].[dbo].BCRA_Risk_Assessment VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           tuple(patient_data.values()))
+            conns.commit()
+            messagebox.showinfo("Database", "Patient record pushed to database.")
+        except Exception as e:
+            messagebox.showerror("Error", f"DB push failed:\n{e}")
+
+    tk.Button(content_frame, text="Save as Excel", command=save_excel).pack(fill="x", pady=5)
+    tk.Button(content_frame, text="Save as CSV", command=save_csv).pack(fill="x", pady=5)
+    tk.Button(content_frame, text="Save as PDF", command=save_pdf).pack(fill="x", pady=5)
+    tk.Button(content_frame, text="Push to Database", command=push_db).pack(fill="x", pady=5)
 
 # ==== Table display ====
 def display_table(df):
-    global tree
-    if df is None or df.empty:
-        messagebox.showwarning("No Data", "No data to display.")
-        return
+    global tree, display_df
+    display_df = filter_and_rename(df)
 
     for widget in table_frame.winfo_children():
         widget.destroy()
@@ -79,99 +168,173 @@ def display_table(df):
     vsb.pack(side="right", fill="y")
     hsb.pack(side="bottom", fill="x")
 
-    tree["columns"] = list(df.columns)
-    for col in df.columns:
+    tree["columns"] = list(display_df.columns)
+    for col in display_df.columns:
         tree.heading(col, text=col)
-        tree.column(col, width=100, anchor="center")
+        tree.column(col, width=120, anchor="center")
 
-    for _, row in df.iterrows():
+    for _, row in display_df.iterrows():
         tree.insert("", "end", values=list(row))
 
-    # Bind selection event
     tree.bind("<<TreeviewSelect>>", update_patient_summary)
+    tree.bind("<Double-1>", on_double_click)
 
-# ==== Data loading functions ====
+# ==== Loaders ====
 def connect_database():
     global current_df
     try:
         conns, cursor = db.setup_dbs()
-        if not cursor:
-            messagebox.showerror("Database Error", "Failed to connect to database.")
-            return
         query = "SELECT * FROM [bcra].[dbo].exampledata;"
         cursor.execute(query)
         rows = cursor.fetchall()
         current_df = pd.DataFrame.from_records(rows, columns=[col[0] for col in cursor.description])
-        messagebox.showinfo("Database", f"Loaded {len(current_df)} patient records from database.")
         display_table(current_df)
+        show_summary_placeholder()
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to load from database:\n{e}")
+        messagebox.showerror("Error", f"DB load failed:\n{e}")
 
 def load_excel_file():
     global current_df
-    file_path = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
-    if not file_path:
+    path = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
+    if not path:
         return
     try:
-        current_df = pd.read_excel(file_path)
-        messagebox.showinfo("Excel Load", f"Loaded {len(current_df)} records from Excel file.")
+        current_df = pd.read_excel(path)
         display_table(current_df)
+        show_summary_placeholder()
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to load Excel file:\n{e}")
+        messagebox.showerror("Error", f"Excel load failed:\n{e}")
 
 def load_csv_file():
     global current_df
-    file_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
-    if not file_path:
+    path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+    if not path:
         return
     try:
-        current_df = pd.read_csv(file_path)
-        messagebox.showinfo("CSV Load", f"Loaded {len(current_df)} records from CSV file.")
+        current_df = pd.read_csv(path)
         display_table(current_df)
+        show_summary_placeholder()
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to load CSV file:\n{e}")
+        messagebox.showerror("Error", f"CSV load failed:\n{e}")
 
 # ==== Generate Report ====
 def generate_report():
     global current_df
     if current_df is None or current_df.empty:
-        messagebox.showerror("No Data", "Please load patient data first.")
+        messagebox.showerror("No Data", "Load data first.")
+        return
+    try:
+        current_df = bcra.bcra_analysis(current_df.values.tolist())
+        display_table(current_df)
+        messagebox.showinfo("Success", "Risk assessment completed.")
+    except Exception as e:
+        messagebox.showerror("Error", f"Gail model failed:\n{e}")
+
+# ==== Save Report functions ====
+def save_all_excel():
+    if display_df is None or display_df.empty:
+        messagebox.showerror("Error", "No data to save.")
+        return
+    file = filedialog.asksaveasfilename(defaultextension=".xlsx")
+    if file:
+        display_df.to_excel(file, index=False)
+
+def save_all_csv():
+    if display_df is None or display_df.empty:
+        messagebox.showerror("Error", "No data to save.")
+        return
+    file = filedialog.asksaveasfilename(defaultextension=".csv")
+    if file:
+        display_df.to_csv(file, index=False)
+
+def save_all_pdf():
+    if display_df is None or display_df.empty:
+        messagebox.showerror("Error", "No data to save.")
+        return
+    file = filedialog.asksaveasfilename(defaultextension=".pdf")
+    if not file:
         return
 
+    class PDF(FPDF):
+        def header(self):
+            self.set_fill_color(231, 84, 128)
+            self.set_text_color(255, 255, 255)
+            self.set_font("Arial", "B", 16)
+            self.cell(0, 10, "Breast Cancer Risk Assessment Report", ln=True, align="C", fill=True)
+            self.ln(5)
+        def footer(self):
+            self.set_y(-15)
+            self.set_font("Arial", "I", 8)
+            self.set_text_color(128)
+            self.cell(0, 10, f"Page {self.page_no()}", align="C")
+
+    pdf = PDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    # Table header
+    pdf.set_font("Arial", "B", 10)
+    pdf.set_fill_color(240, 128, 128)
+    pdf.set_text_color(255, 255, 255)
+
+    columns = list(display_df.columns)
+    col_width = pdf.w / len(columns) - 2  # subtract for margin
+
+    for col in columns:
+        pdf.cell(col_width, 8, str(col), border=1, align="C", fill=True)
+    pdf.ln()
+
+    # Rows
+    pdf.set_font("Arial", "", 9)
+    pdf.set_text_color(0, 0, 0)
+    for _, row in display_df.iterrows():
+        for val in row:
+            txt = str(val)
+            pdf.cell(col_width, 8, txt, border=1)
+        pdf.ln()
+
+
+    pdf.output(file)
+    messagebox.showinfo("Saved", f"PDF saved:\n{file}")
+
+def export_all_db():
+    if display_df is None or display_df.empty:
+        messagebox.showerror("Error", "No data to export.")
+        return
     try:
-        results_df = bcra.bcra_analysis(current_df.values.tolist())
-        current_df = results_df
-        display_table(current_df)
-        messagebox.showinfo("Success", "Risk assessment completed successfully.")
+        conns, cursor = db.setup_dbs()
+        cursor.execute("TRUNCATE TABLE [bcra].[dbo].BCRA_Risk_Assessment")
+        for _, row in display_df.iterrows():
+            cursor.execute("INSERT INTO [bcra].[dbo].BCRA_Risk_Assessment VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           tuple(row.values))
+        conns.commit()
+        messagebox.showinfo("Database", "Exported to database.")
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to run Gail model:\n{e}")
+        messagebox.showerror("Error", f"DB export failed:\n{e}")
 
-# ==== Login placeholder ====
-def login_action():
-    messagebox.showinfo("Login", "Login functionality will be implemented later.")
-
-# ==== Styled button helper ====
+# ==== Styled button ====
 def create_styled_button(parent, text, style_name, command=None, fill_x=True):
     btn = ttk.Button(parent, text=text, style=style_name, command=command)
     if fill_x:
-        btn.pack(pady=5, ipadx=5, ipady=2, fill="x")
+        btn.pack(pady=5, fill="x")
     else:
-        btn.pack(pady=5, ipadx=10, ipady=5)
+        btn.pack(pady=5)
     return btn
 
-# ==== Modern frame helper ====
-def create_modern_frame(parent, title, bg_color=PINK, text_color="white"):
+# ==== Frame helper ====
+def create_modern_frame(parent, title, bg_color=PINK):
     frame_container = tk.Frame(parent, bg="white", bd=1, relief="solid")
     header = tk.Frame(frame_container, bg=bg_color)
     header.pack(fill="x")
-    tk.Label(header, text=title, bg=bg_color, fg=text_color, font=("Arial", 14, "bold"), pady=5).pack()
+    tk.Label(header, text=title, bg=bg_color, fg="white", font=("Arial", 14, "bold"), pady=5).pack()
     content_frame = tk.Frame(frame_container, bg="white", padx=10, pady=10)
     content_frame.pack(fill="both", expand=True)
     return frame_container, content_frame
 
-# ==== Create application ====
+# ==== Create App ====
 def create_app():
-    global table_frame, summary_labels
+    global table_frame, summary_frame_content
+
     root = tk.Tk()
     root.title("Breast Cancer Risk Assessment")
     root.geometry("1200x750")
@@ -179,28 +342,16 @@ def create_app():
 
     style = ttk.Style()
     style.theme_use("clam")
-    style.configure("Pink.TButton", background=PINK, foreground="black", font=("Arial", 11, "bold"), borderwidth=1)
-    style.map("Pink.TButton", background=[("active", PINK)], foreground=[("active", "black")])
-    style.configure("White.TButton", background="white", foreground="black", font=("Arial", 11, "bold"), borderwidth=1, relief="solid")
-    style.map("White.TButton", background=[("active", "#f0f0f0")])
-    style.configure("PinkFilled.TButton", background=PINK, foreground="white", font=("Arial", 12, "bold"), borderwidth=1)
-    style.map("PinkFilled.TButton", background=[("active", PINK)], foreground=[("active", "white")])
+    style.configure("Pink.TButton", background=PINK, foreground="black", font=("Arial", 11, "bold"))
+    style.configure("White.TButton", background="white", foreground="black", font=("Arial", 11, "bold"))
+    style.configure("PinkFilled.TButton", background=PINK, foreground="white", font=("Arial", 12, "bold"))
 
     # Title bar
     title_bar = tk.Frame(root, bg=PINK, pady=10)
     title_bar.pack(fill="x")
-    try:
-        logo_img = Image.open("breast_cancer_logo.png").resize((40, 40), Image.LANCZOS)
-        ribbon_logo = ImageTk.PhotoImage(logo_img)
-        logo_label = tk.Label(title_bar, image=ribbon_logo, bg=PINK)
-        logo_label.image = ribbon_logo
-        logo_label.pack(side="left", padx=(20, 5))
-    except FileNotFoundError:
-        print("Logo image 'breast_cancer_logo.png' not found.")
     tk.Label(title_bar, text="Breast Cancer Risk Assessment", font=("Arial", 24, "bold"), fg="white", bg=PINK).pack(side="left", expand=True)
-    ttk.Button(title_bar, text="Login", style="White.TButton", command=login_action).pack(side="right", padx=20)
 
-    # Top buttons
+    # Top menu
     top_frame = tk.Frame(root, bg="#f4f6f8", pady=15)
     top_frame.pack(fill="x", padx=20)
     for frame_name, buttons in [
@@ -210,48 +361,45 @@ def create_app():
     ]:
         lf, lf_content = create_modern_frame(top_frame, frame_name)
         lf.pack(side="left", expand=True, fill="both", padx=5)
-        for btn_info in buttons:
-            if len(btn_info) == 3:
-                btn_text, btn_style, btn_cmd = btn_info
-                create_styled_button(lf_content, btn_text, btn_style, command=btn_cmd)
+        for btn in buttons:
+            if len(btn) == 3:
+                create_styled_button(lf_content, btn[0], btn[1], command=btn[2])
             else:
-                btn_text, btn_style = btn_info
-                create_styled_button(lf_content, btn_text, btn_style)
+                create_styled_button(lf_content, btn[0], btn[1])
 
-    # Bottom section with Requirements and Patient Summary
+    # Bottom
     bottom_frame = tk.Frame(root, bg="#f4f6f8", pady=15)
     bottom_frame.pack(fill="both", expand=True, padx=20)
 
-    # Requirements
     req_frame, req_content = create_modern_frame(bottom_frame, "Requirements")
-    req_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+    req_frame.pack(side="left", fill="both", expand=True, padx=5)
     for req in REQUIREMENTS_INFO.keys():
         link = tk.Label(req_content, text=req, fg=BLUE_LINK, cursor="hand2", bg="white", font=("Arial", 12, "underline"))
         link.pack(anchor="w", pady=2)
-        link.bind("<Button-1>", lambda e, r=req: show_info(r))
 
-    # Patient Summary
-    summary_frame, summary_content = create_modern_frame(bottom_frame, "Patient Summary")
-    summary_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+    summary_frame, summary_frame_content = create_modern_frame(bottom_frame, "Patient Summary")
+    summary_frame.pack(side="left", fill="both", expand=True, padx=5)
+    show_summary_placeholder()
 
-    # Default message before data is loaded
-    default_label = tk.Label(summary_content, text="Select a patient to see summary", bg="white", font=("Arial", 11, "italic"))
-    default_label.pack(anchor="w", pady=2)
+    save_frame, save_content = create_modern_frame(bottom_frame, "Save Report")
+    save_frame.pack(side="left", fill="both", expand=True, padx=5)
+    create_styled_button(save_content, "Save as Excel", "White.TButton", command=save_all_excel)
+    create_styled_button(save_content, "Save as CSV", "White.TButton", command=save_all_csv)
+    create_styled_button(save_content, "Save as PDF", "White.TButton", command=save_all_pdf)
+    create_styled_button(save_content, "Export to Database", "White.TButton", command=export_all_db)
 
-    # Create summary labels
-    for display_name in COLUMN_MAPPING.values():
-        lbl = tk.Label(summary_content, text=f"{display_name}: N/A", bg="white", font=("Arial", 11))
-        lbl.pack(anchor="w", pady=2)
-        summary_labels[display_name] = lbl
-
-    # Table display area
+    # Table area
     table_frame = tk.Frame(root, bg="#f4f6f8")
     table_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-    # Generate Report
-    action_frame = tk.Frame(root, bg="#f4f6f8", pady=20)
-    action_frame.pack(fill="x")
-    create_styled_button(action_frame, "Generate Report", "PinkFilled.TButton", command=generate_report, fill_x=False)
+    # Footer
+    footer = tk.Frame(root, bg="#f4f6f8")
+    footer.pack(side="bottom", fill="x", pady=5)
+    tk.Label(footer, text="Privacy", fg=BLUE_LINK, cursor="hand2", bg="#f4f6f8").pack(side="right", padx=10)
+    tk.Label(footer, text="About", fg=BLUE_LINK, cursor="hand2", bg="#f4f6f8").pack(side="right", padx=10)
+
+    # Generate report
+    create_styled_button(root, "Generate Report", "PinkFilled.TButton", command=generate_report, fill_x=False)
 
     root.mainloop()
 
