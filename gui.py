@@ -62,16 +62,23 @@ def run_gui():
 
     # ===== Display Table =====
     def display_results(df):
-        """Display DataFrame in a scrollable Treeview."""
+        """Display cleaned DataFrame in a scrollable Treeview."""
         for widget in results_frame.winfo_children():
             widget.destroy()
 
-        tree = ttk.Treeview(results_frame, columns=list(df.columns), show="headings", height=15)
-        for col in df.columns:
-            tree.heading(col, text=col)
+        # Remove unwanted columns and rename T1 to Age
+        columns_to_remove = ["T2", "T3", "Race"]
+        df_display = df.drop(columns=[col for col in columns_to_remove if col in df.columns], errors="ignore")
+        df_display = df_display.rename(columns={"T1": "Age"})
+
+        # Create Treeview
+        tree = ttk.Treeview(results_frame, columns=list(df_display.columns), show="headings", height=15)
+
+        for col in df_display.columns:
+            tree.heading(col, text=col)  # display header
             tree.column(col, width=100)
 
-        for _, row in df.iterrows():
+        for _, row in df_display.iterrows():
             tree.insert("", tk.END, values=list(row))
 
         scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=tree.yview)
