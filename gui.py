@@ -38,31 +38,37 @@ def run_gui():
 
     # ===== Filtering Function =====
     def apply_filters():
-        """Filter table based on search term and risk category."""
+        """Filter table based on search and risk filter."""
         if current_results_df is None:
             return
 
-        df = current_results_df.copy()
+        df_filtered = current_results_df.copy()
 
         # Filter by Patient ID
         search_term = search_var.get().strip().lower()
-        if search_term:
-            df = df[df["ID"].astype(str).str.lower().str.contains(search_term)]
+        if search_term and "ID" in df_filtered.columns:
+            df_filtered = df_filtered[df_filtered["ID"].astype(str).str.lower().str.contains(search_term)]
 
         # Filter by risk category
-        risk_choice = risk_filter_var.get()
-        if risk_choice == "Low (<1.67%)":
-            df = df[df["Five_Year_Risk"] < 1.67]
-        elif risk_choice == "Medium (1.67–3%)":
-            df = df[(df["Five_Year_Risk"] >= 1.67) & (df["Five_Year_Risk"] < 3)]
-        elif risk_choice == "High (≥3%)":
-            df = df[df["Five_Year_Risk"] >= 3]
+        if "Five_Year_Risk" in df_filtered.columns:
+            risk_choice = risk_filter_var.get()
+            if risk_choice == "Low (<1.67%)":
+                df_filtered = df_filtered[df_filtered["Five_Year_Risk"] < 1.67]
+            elif risk_choice == "Medium (1.67–3%)":
+                df_filtered = df_filtered[(df_filtered["Five_Year_Risk"] >= 1.67) & (df_filtered["Five_Year_Risk"] < 3)]
+            elif risk_choice == "High (≥3%)":
+                df_filtered = df_filtered[df_filtered["Five_Year_Risk"] >= 3]
 
-        display_results(df)
+        # Show filtered table
+        display_results(df_filtered)
+
+
 
     # ===== Display Table =====
     def display_results(df):
         """Display cleaned DataFrame in a scrollable Treeview."""
+        global current_results_df
+
         for widget in results_frame.winfo_children():
             widget.destroy()
 
@@ -71,11 +77,13 @@ def run_gui():
         df_display = df.drop(columns=[col for col in columns_to_remove if col in df.columns], errors="ignore")
         df_display = df_display.rename(columns={"T1": "Age"})
 
+        # Store the cleaned DataFrame so filtering works on this version
+        current_results_df = df_display.copy()
+
         # Create Treeview
         tree = ttk.Treeview(results_frame, columns=list(df_display.columns), show="headings", height=15)
-
         for col in df_display.columns:
-            tree.heading(col, text=col)  # display header
+            tree.heading(col, text=col)
             tree.column(col, width=100)
 
         for _, row in df_display.iterrows():
