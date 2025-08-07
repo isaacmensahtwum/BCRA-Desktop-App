@@ -5,6 +5,7 @@ import pandas as pd
 import db
 import bcra
 from fpdf import FPDF
+import math
 from textwrap import wrap
 
 PINK = "#E75480"
@@ -80,76 +81,99 @@ def update_patient_summary(event=None):
 
 # ==== Double-click popup ====
 def on_double_click(event=None):
-    if tree is None or display_df is None:
+    if tree is None or current_df is None:
         return
+
     selected_item = tree.selection()
     if not selected_item:
         return
+
     values = tree.item(selected_item[0], "values")
-    patient_data = dict(zip(display_df.columns, values))
+    if not values:
+        return
+
+    patient_data = dict(zip(current_df.columns, values))
 
     popup = tk.Toplevel()
     popup.title("Patient Profile")
-    popup.geometry("400x500")
+    popup.geometry("400x600")
     popup.configure(bg="white")
 
     # Header
     tk.Label(
-        popup, text="Patient Profile", font=("Arial", 16, "bold"),
-        bg=PINK, fg="white", pady=10
+        popup,
+        text="Patient Profile",
+        font=("Arial", 16, "bold"),
+        bg=PINK,
+        fg="white",
+        pady=10
     ).pack(fill="x")
 
-    content_frame = tk.Frame(popup, bg="white", padx=15, pady=15)
+    content_frame = tk.Frame(popup, bg="white", padx=15, pady=10)
     content_frame.pack(fill="both", expand=True)
 
-    # Grouped sections
-    def add_section(title, fields):
-        tk.Label(content_frame, text=title, bg="white", fg=PINK, font=("Arial", 12, "bold")).pack(anchor="w", pady=(10, 2))
-        for field in fields:
-            if field in patient_data:
-                tk.Label(content_frame, text=f"{field}: {patient_data[field]}", bg="white").pack(anchor="w")
+    def add_section(title, keys):
+        tk.Label(content_frame, text=title, font=("Arial", 12, "bold"), fg=PINK, bg="white").pack(anchor="w", pady=(10, 2))
+        for key in keys:
+            value = patient_data.get(key, "N/A")
+            tk.Label(content_frame, text=f"{COLUMN_MAPPING.get(key, key)}: {value}", bg="white", font=("Arial", 11)).pack(anchor="w")
 
-    add_section("Demographics", ["Age", "Race"])
-    add_section("Clinical History", ["Biopsies", "Hyperplasia", "Menarche", "First Live Birth", "First Degree Relatives"])
-    add_section("Risk Assessment", ["Five Year Risk", "Lifetime Risk"])
+    # Grouped Sections
+    add_section("Demographics", ["T1", "RaceName"])
+    add_section("Clinical History", ["N_Biop", "HypPlas", "AgeMen", "Age1st", "N_Rels"])
+    add_section("Risk Assessment", ["Five_Year_Risk", "Lifetime_Risk"])
 
-    # Save functions
-    def save_excel():
-        file = filedialog.asksaveasfilename(defaultextension=".xlsx")
-        if file:
-            pd.DataFrame([patient_data]).to_excel(file, index=False)
+    # Share Report Toggle
+    def toggle_share_options():
+        if share_frame.winfo_ismapped():
+            share_frame.pack_forget()
+        else:
+            share_frame.pack(pady=(10, 0))
 
-    def save_csv():
-        file = filedialog.asksaveasfilename(defaultextension=".csv")
-        if file:
-            pd.DataFrame([patient_data]).to_csv(file, index=False)
+    ttk.Button(content_frame, text="Share Report to Patient", style="Pink.TButton", command=toggle_share_options).pack(pady=(20, 5))
 
-    def save_pdf():
-        file = filedialog.asksaveasfilename(defaultextension=".pdf")
-        if file:
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", "B", 14)
-            pdf.cell(0, 10, "Patient Profile", ln=True, align="C")
-            pdf.set_font("Arial", "", 12)
-            for k, v in patient_data.items():
-                pdf.cell(0, 8, f"{k}: {v}", ln=True)
-            pdf.output(file)
+    # Share Frame (hidden initially)
+    share_frame = tk.Frame(content_frame, bg="white")
 
-    def push_db():
-        try:
-            conns, cursor = db.setup_dbs()
-            cursor.execute("INSERT INTO [bcra].[dbo].BCRA_Risk_Assessment VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                           tuple(patient_data.values()))
-            conns.commit()
-            messagebox.showinfo("Database", "Patient record pushed to database.")
-        except Exception as e:
-            messagebox.showerror("Error", f"DB push failed:\n{e}")
+    def save_popup_csv():
+        file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+        if file_path:
+            pd.DataFrame([patient_data]).to_csv(file_path, index=False)
 
-    tk.Button(content_frame, text="Save as Excel", command=save_excel).pack(fill="x", pady=5)
-    tk.Button(content_frame, text="Save as CSV", command=save_csv).pack(fill="x", pady=5)
-    tk.Button(content_frame, text="Save as PDF", command=save_pdf).pack(fill="x", pady=5)
-    tk.Button(content_frame, text="Push to Database", command=push_db).pack(fill="x", pady=5)
+    def save_popup_excel():
+        file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
+        if file_path:
+            pd.DataFrame([patient_data]).to_excel(file_path, index=False)
+
+    def save_popup_pdf():
+        from fpdf import FPDF
+        file_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
+        if not file_path:
+            return
+
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 16)
+        pdf.set_text_color(231, 84, 128)
+        pdf.cell(0, 10, "Patient Summary Report", ln=True, align="C")
+
+        pdf.set_font("Arial", "", 12)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(10)
+
+        for key in ["T1", "RaceName", "N_Biop", "HypPlas", "AgeMen", "Age1st", "N_Rels", "Five_Year_Risk", "Lifetime_Risk"]:
+            value = patient_data.get(key, "N/A")
+            pdf.multi_cell(0, 8, f"{COLUMN_MAPPING.get(key, key)}: {value}", border=0)
+
+        pdf.output(file_path)
+
+    ttk.Button(share_frame, text="Save as Excel", style="Pink.TButton", command=save_popup_excel).pack(pady=3, fill="x")
+    ttk.Button(share_frame, text="Save as CSV", style="Pink.TButton", command=save_popup_csv).pack(pady=3, fill="x")
+    ttk.Button(share_frame, text="Save as PDF", style="Pink.TButton", command=save_popup_pdf).pack(pady=3, fill="x")
+
+    # Close Button
+    tk.Button(popup, text="Close", command=popup.destroy).pack(pady=15)
+
 
 # ==== Table display ====
 def display_table(df):
@@ -259,9 +283,9 @@ def save_all_pdf():
         def header(self):
             self.set_fill_color(231, 84, 128)
             self.set_text_color(255, 255, 255)
-            self.set_font("Arial", "B", 16)
+            self.set_font("Arial", "B", 14)
             self.cell(0, 10, "Breast Cancer Risk Assessment Report", ln=True, align="C", fill=True)
-            self.ln(5)
+            self.ln(4)
         def footer(self):
             self.set_y(-15)
             self.set_font("Arial", "I", 8)
@@ -269,33 +293,44 @@ def save_all_pdf():
             self.cell(0, 10, f"Page {self.page_no()}", align="C")
 
     pdf = PDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_auto_page_break(auto=True, margin=10)
     pdf.add_page()
 
-    # Table header
-    pdf.set_font("Arial", "B", 10)
+    col_width = (pdf.w - 20) / len(display_df.columns)
+    row_height = 8
+    font_size = 9
+
+    pdf.set_font("Arial", "B", font_size)
     pdf.set_fill_color(240, 128, 128)
     pdf.set_text_color(255, 255, 255)
 
-    columns = list(display_df.columns)
-    col_width = pdf.w / len(columns) - 2  # subtract for margin
+    # Header
+    for col in display_df.columns:
+        pdf.cell(col_width, row_height, col, border=1, align="C", fill=True)
+    pdf.ln(row_height)
 
-    for col in columns:
-        pdf.cell(col_width, 8, str(col), border=1, align="C", fill=True)
-    pdf.ln()
-
-    # Rows
-    pdf.set_font("Arial", "", 9)
+    # Body
+    pdf.set_font("Arial", "", font_size)
     pdf.set_text_color(0, 0, 0)
-    for _, row in display_df.iterrows():
-        for val in row:
-            txt = str(val)
-            pdf.cell(col_width, 8, txt, border=1)
-        pdf.ln()
 
+    for _, row in display_df.iterrows():
+        max_lines = 1
+        wrapped = []
+
+        for value in row:
+            lines = wrap(str(value), width=20)  # wrap text to fit in cell
+            wrapped.append(lines)
+            max_lines = max(max_lines, len(lines))
+
+        for i in range(max_lines):
+            for j, cell_lines in enumerate(wrapped):
+                text = cell_lines[i] if i < len(cell_lines) else ""
+                pdf.cell(col_width, row_height, text, border=1)
+            pdf.ln(row_height)
 
     pdf.output(file)
     messagebox.showinfo("Saved", f"PDF saved:\n{file}")
+
 
 def export_all_db():
     if display_df is None or display_df.empty:
