@@ -83,23 +83,26 @@ def update_patient_summary(event=None):
 def on_double_click(event=None):
     if tree is None or current_df is None:
         return
-
     selected_item = tree.selection()
     if not selected_item:
         return
 
-    values = tree.item(selected_item[0], "values")
-    if not values:
-        return
+    item_id = selected_item[0]
+    index = tree.index(item_id)
 
-    patient_data = dict(zip(current_df.columns, values))
+    # Get the actual row from current_df based on index
+    actual_row = current_df.iloc[index]
+
+    # Prepare patient data using COLUMN_MAPPING
+    patient_data = {}
+    for internal_col, display_name in COLUMN_MAPPING.items():
+        patient_data[display_name] = actual_row.get(internal_col, "N/A")
 
     popup = tk.Toplevel()
     popup.title("Patient Profile")
-    popup.geometry("400x600")
+    popup.geometry("400x550")
     popup.configure(bg="white")
 
-    # Header
     tk.Label(
         popup,
         text="Patient Profile",
@@ -109,70 +112,143 @@ def on_double_click(event=None):
         pady=10
     ).pack(fill="x")
 
-    content_frame = tk.Frame(popup, bg="white", padx=15, pady=10)
+    content_frame = tk.Frame(popup, bg="white", padx=15, pady=15)
     content_frame.pack(fill="both", expand=True)
 
-    def add_section(title, keys):
+    def add_section(title, display_keys):
         tk.Label(content_frame, text=title, font=("Arial", 12, "bold"), fg=PINK, bg="white").pack(anchor="w", pady=(10, 2))
-        for key in keys:
-            value = patient_data.get(key, "N/A")
-            tk.Label(content_frame, text=f"{COLUMN_MAPPING.get(key, key)}: {value}", bg="white", font=("Arial", 11)).pack(anchor="w")
+        for label in display_keys:
+            value = patient_data.get(label, "N/A")
+            tk.Label(content_frame, text=f"{label}: {value}", bg="white", font=("Arial", 11)).pack(anchor="w")
 
-    # Grouped Sections
-    add_section("Demographics", ["T1", "RaceName"])
-    add_section("Clinical History", ["N_Biop", "HypPlas", "AgeMen", "Age1st", "N_Rels"])
-    add_section("Risk Assessment", ["Five_Year_Risk", "Lifetime_Risk"])
+    add_section("Demographics", ["Age", "Race"])
+    add_section("Clinical History", ["Biopsies", "Hyperplasia", "Menarche", "First Live Birth", "First Degree Relatives"])
+    add_section("Risk Assessment", ["Five Year Risk", "Lifetime Risk"])
 
-    # Share Report Toggle
-    def toggle_share_options():
-        if share_frame.winfo_ismapped():
-            share_frame.pack_forget()
-        else:
-            share_frame.pack(pady=(10, 0))
+    # Buttons
+    button_frame = tk.Frame(popup, bg="white")
+    button_frame.pack(pady=10)
 
-    ttk.Button(content_frame, text="Share Report to Patient", style="Pink.TButton", command=toggle_share_options).pack(pady=(20, 5))
+    ttk.Button(button_frame, text="📧 Email Report").pack(pady=5)
+    ttk.Button(button_frame, text="📲 Text Report").pack(pady=5)
+    ttk.Button(popup, text="Close", command=popup.destroy).pack(pady=10)
 
-    # Share Frame (hidden initially)
-    share_frame = tk.Frame(content_frame, bg="white")
 
-    def save_popup_csv():
-        file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
-        if file_path:
-            pd.DataFrame([patient_data]).to_csv(file_path, index=False)
 
-    def save_popup_excel():
-        file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
-        if file_path:
-            pd.DataFrame([patient_data]).to_excel(file_path, index=False)
+# def on_double_click(event=None):
+#     if tree is None or current_df is None:
+#         return
+#     selected_item = tree.selection()
+#     if not selected_item:
+#         return
 
-    def save_popup_pdf():
-        from fpdf import FPDF
-        file_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
-        if not file_path:
-            return
+#     # Get internal columns and values
+#     internal_columns = tree["columns"]
+#     values = tree.item(selected_item[0], "values")
+#     if not values:
+#         return
 
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 16)
-        pdf.set_text_color(231, 84, 128)
-        pdf.cell(0, 10, "Patient Summary Report", ln=True, align="C")
+#     # Zip values with internal column names (e.g., T1, N_Biop, etc.)
+#     raw_patient_data = dict(zip(internal_columns, values))
 
-        pdf.set_font("Arial", "", 12)
-        pdf.set_text_color(0, 0, 0)
-        pdf.ln(10)
+#     # Convert to display names
+#     patient_data = {}
+#     for internal_col, display_name in COLUMN_MAPPING.items():
+#         patient_data[display_name] = raw_patient_data.get(internal_col, "N/A")
 
-        for key in ["T1", "RaceName", "N_Biop", "HypPlas", "AgeMen", "Age1st", "N_Rels", "Five_Year_Risk", "Lifetime_Risk"]:
-            value = patient_data.get(key, "N/A")
-            pdf.multi_cell(0, 8, f"{COLUMN_MAPPING.get(key, key)}: {value}", border=0)
+#     # Manually override Age
+#     patient_data["Age"] = 63
 
-        pdf.output(file_path)
+#     popup = tk.Toplevel()
+#     popup.title("Patient Profile")
+#     popup.geometry("400x550")
+#     popup.configure(bg="white")
 
-    ttk.Button(share_frame, text="Save as Excel", style="Pink.TButton", command=save_popup_excel).pack(pady=3, fill="x")
-    ttk.Button(share_frame, text="Save as CSV", style="Pink.TButton", command=save_popup_csv).pack(pady=3, fill="x")
-    ttk.Button(share_frame, text="Save as PDF", style="Pink.TButton", command=save_popup_pdf).pack(pady=3, fill="x")
+#     tk.Label(
+#         popup,
+#         text="Patient Profile",
+#         font=("Arial", 16, "bold"),
+#         bg=PINK,
+#         fg="white",
+#         pady=10
+#     ).pack(fill="x")
 
-    # Close Button
-    tk.Button(popup, text="Close", command=popup.destroy).pack(pady=15)
+#     content_frame = tk.Frame(popup, bg="white", padx=15, pady=15)
+#     content_frame.pack(fill="both", expand=True)
+
+#     def add_section(title, display_keys):
+#         tk.Label(content_frame, text=title, font=("Arial", 12, "bold"), fg=PINK, bg="white").pack(anchor="w", pady=(10, 2))
+#         for label in display_keys:
+#             value = patient_data.get(label, "N/A")
+#             tk.Label(content_frame, text=f"{label}: {value}", bg="white", font=("Arial", 11)).pack(anchor="w")
+
+#     add_section("Demographics", ["Age", "Race"])
+#     add_section("Clinical History", ["Biopsies", "Hyperplasia", "Menarche", "First Live Birth", "First Degree Relatives"])
+#     add_section("Risk Assessment", ["Five Year Risk", "Lifetime Risk"])
+
+#     # Buttons
+#     button_frame = tk.Frame(popup, bg="white")
+#     button_frame.pack(pady=10)
+
+#     ttk.Button(button_frame, text="📧 Email Report").pack(pady=5)
+#     ttk.Button(button_frame, text="📲 Text Report").pack(pady=5)
+#     ttk.Button(popup, text="Close", command=popup.destroy).pack(pady=10)
+
+# def on_double_click(event=None):
+#     if tree is None or current_df is None:
+#         return
+#     selected_item = tree.selection()
+#     if not selected_item:
+#         return
+
+#     # Get internal columns and values
+#     internal_columns = tree["columns"]
+#     values = tree.item(selected_item[0], "values")
+#     if not values:
+#         return
+
+#     # Zip values with internal column names (e.g., T1, N_Biop, etc.)
+#     raw_patient_data = dict(zip(internal_columns, values))
+
+#     # Convert to display names
+#     patient_data = {}
+#     for internal_col, display_name in COLUMN_MAPPING.items():
+#         patient_data[display_name] = raw_patient_data.get(internal_col, "N/A")
+
+#     popup = tk.Toplevel()
+#     popup.title("Patient Profile")
+#     popup.geometry("400x550")
+#     popup.configure(bg="white")
+
+#     tk.Label(
+#         popup,
+#         text="Patient Profile",
+#         font=("Arial", 16, "bold"),
+#         bg=PINK,
+#         fg="white",
+#         pady=10
+#     ).pack(fill="x")
+
+#     content_frame = tk.Frame(popup, bg="white", padx=15, pady=15)
+#     content_frame.pack(fill="both", expand=True)
+
+#     def add_section(title, display_keys):
+#         tk.Label(content_frame, text=title, font=("Arial", 12, "bold"), fg=PINK, bg="white").pack(anchor="w", pady=(10, 2))
+#         for label in display_keys:
+#             value = patient_data.get(label, "N/A")
+#             tk.Label(content_frame, text=f"{label}: {value}", bg="white", font=("Arial", 11)).pack(anchor="w")
+
+#     add_section("Demographics", ["Age", "Race"])
+#     add_section("Clinical History", ["Biopsies", "Hyperplasia", "Menarche", "First Live Birth", "First Degree Relatives"])
+#     add_section("Risk Assessment", ["Five Year Risk", "Lifetime Risk"])
+
+#     # Buttons
+#     button_frame = tk.Frame(popup, bg="white")
+#     button_frame.pack(pady=10)
+
+#     ttk.Button(button_frame, text="📧 Email Report").pack(pady=5)
+#     ttk.Button(button_frame, text="📲 Text Report").pack(pady=5)
+#     ttk.Button(popup, text="Close", command=popup.destroy).pack(pady=10)
 
 
 # ==== Table display ====
