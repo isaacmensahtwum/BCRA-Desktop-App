@@ -5,7 +5,6 @@ import pandas as pd
 import db
 import bcra
 from fpdf import FPDF
-import math
 from textwrap import wrap
 
 PINK = "#E75480"
@@ -24,7 +23,7 @@ COLUMN_MAPPING = {
     "Lifetime_Risk": "Lifetime Risk"
 }
 
-REMOVE_COLS = ["T2", "T3", "Race"]  # columns to drop
+REMOVE_COLS = ["T2", "T3", "Race"] 
 
 # Global vars
 current_df = None
@@ -32,7 +31,7 @@ display_df = None
 tree = None
 summary_frame_content = None
 
-# ==== Requirement Explanations ====
+
 REQUIREMENTS_INFO = {
     "Age": "The patient's current age in years.",
     "Biopsies": "Number of prior breast biopsies the patient has had.",
@@ -90,10 +89,8 @@ def on_double_click(event=None):
     item_id = selected_item[0]
     index = tree.index(item_id)
 
-    # Get the actual row from current_df based on index
     actual_row = current_df.iloc[index]
 
-    # Prepare patient data using COLUMN_MAPPING
     patient_data = {}
     for internal_col, display_name in COLUMN_MAPPING.items():
         patient_data[display_name] = actual_row.get(internal_col, "N/A")
@@ -124,6 +121,7 @@ def on_double_click(event=None):
     add_section("Demographics", ["Age", "Race"])
     add_section("Clinical History", ["Biopsies", "Hyperplasia", "Menarche", "First Live Birth", "First Degree Relatives"])
     add_section("Risk Assessment", ["Five Year Risk", "Lifetime Risk"])
+    add_section("PCP Notes: ", [])
 
     # Buttons
     button_frame = tk.Frame(popup, bg="white")
@@ -132,123 +130,6 @@ def on_double_click(event=None):
     ttk.Button(button_frame, text="📧 Email Report").pack(pady=5)
     ttk.Button(button_frame, text="📲 Text Report").pack(pady=5)
     ttk.Button(popup, text="Close", command=popup.destroy).pack(pady=10)
-
-
-
-# def on_double_click(event=None):
-#     if tree is None or current_df is None:
-#         return
-#     selected_item = tree.selection()
-#     if not selected_item:
-#         return
-
-#     # Get internal columns and values
-#     internal_columns = tree["columns"]
-#     values = tree.item(selected_item[0], "values")
-#     if not values:
-#         return
-
-#     # Zip values with internal column names (e.g., T1, N_Biop, etc.)
-#     raw_patient_data = dict(zip(internal_columns, values))
-
-#     # Convert to display names
-#     patient_data = {}
-#     for internal_col, display_name in COLUMN_MAPPING.items():
-#         patient_data[display_name] = raw_patient_data.get(internal_col, "N/A")
-
-#     # Manually override Age
-#     patient_data["Age"] = 63
-
-#     popup = tk.Toplevel()
-#     popup.title("Patient Profile")
-#     popup.geometry("400x550")
-#     popup.configure(bg="white")
-
-#     tk.Label(
-#         popup,
-#         text="Patient Profile",
-#         font=("Arial", 16, "bold"),
-#         bg=PINK,
-#         fg="white",
-#         pady=10
-#     ).pack(fill="x")
-
-#     content_frame = tk.Frame(popup, bg="white", padx=15, pady=15)
-#     content_frame.pack(fill="both", expand=True)
-
-#     def add_section(title, display_keys):
-#         tk.Label(content_frame, text=title, font=("Arial", 12, "bold"), fg=PINK, bg="white").pack(anchor="w", pady=(10, 2))
-#         for label in display_keys:
-#             value = patient_data.get(label, "N/A")
-#             tk.Label(content_frame, text=f"{label}: {value}", bg="white", font=("Arial", 11)).pack(anchor="w")
-
-#     add_section("Demographics", ["Age", "Race"])
-#     add_section("Clinical History", ["Biopsies", "Hyperplasia", "Menarche", "First Live Birth", "First Degree Relatives"])
-#     add_section("Risk Assessment", ["Five Year Risk", "Lifetime Risk"])
-
-#     # Buttons
-#     button_frame = tk.Frame(popup, bg="white")
-#     button_frame.pack(pady=10)
-
-#     ttk.Button(button_frame, text="📧 Email Report").pack(pady=5)
-#     ttk.Button(button_frame, text="📲 Text Report").pack(pady=5)
-#     ttk.Button(popup, text="Close", command=popup.destroy).pack(pady=10)
-
-# def on_double_click(event=None):
-#     if tree is None or current_df is None:
-#         return
-#     selected_item = tree.selection()
-#     if not selected_item:
-#         return
-
-#     # Get internal columns and values
-#     internal_columns = tree["columns"]
-#     values = tree.item(selected_item[0], "values")
-#     if not values:
-#         return
-
-#     # Zip values with internal column names (e.g., T1, N_Biop, etc.)
-#     raw_patient_data = dict(zip(internal_columns, values))
-
-#     # Convert to display names
-#     patient_data = {}
-#     for internal_col, display_name in COLUMN_MAPPING.items():
-#         patient_data[display_name] = raw_patient_data.get(internal_col, "N/A")
-
-#     popup = tk.Toplevel()
-#     popup.title("Patient Profile")
-#     popup.geometry("400x550")
-#     popup.configure(bg="white")
-
-#     tk.Label(
-#         popup,
-#         text="Patient Profile",
-#         font=("Arial", 16, "bold"),
-#         bg=PINK,
-#         fg="white",
-#         pady=10
-#     ).pack(fill="x")
-
-#     content_frame = tk.Frame(popup, bg="white", padx=15, pady=15)
-#     content_frame.pack(fill="both", expand=True)
-
-#     def add_section(title, display_keys):
-#         tk.Label(content_frame, text=title, font=("Arial", 12, "bold"), fg=PINK, bg="white").pack(anchor="w", pady=(10, 2))
-#         for label in display_keys:
-#             value = patient_data.get(label, "N/A")
-#             tk.Label(content_frame, text=f"{label}: {value}", bg="white", font=("Arial", 11)).pack(anchor="w")
-
-#     add_section("Demographics", ["Age", "Race"])
-#     add_section("Clinical History", ["Biopsies", "Hyperplasia", "Menarche", "First Live Birth", "First Degree Relatives"])
-#     add_section("Risk Assessment", ["Five Year Risk", "Lifetime Risk"])
-
-#     # Buttons
-#     button_frame = tk.Frame(popup, bg="white")
-#     button_frame.pack(pady=10)
-
-#     ttk.Button(button_frame, text="📧 Email Report").pack(pady=5)
-#     ttk.Button(button_frame, text="📲 Text Report").pack(pady=5)
-#     ttk.Button(popup, text="Close", command=popup.destroy).pack(pady=10)
 
 
 # ==== Table display ====
@@ -466,9 +347,9 @@ def create_app():
     top_frame = tk.Frame(root, bg="#f4f6f8", pady=15)
     top_frame.pack(fill="x", padx=20)
     for frame_name, buttons in [
-        ("Risk Calculator", [("BCRA", "Pink.TButton"), ("Tyrer-Cuzick", "White.TButton"), ("BOADICEA", "White.TButton")]),
+        ("Risk Calculator", [("BCRA Model", "Pink.TButton"), ("Tyrer-Cuzick Model", "White.TButton"), ("BOADICEA Model", "White.TButton")]),
         ("Data Source", [("Connect to DB", "White.TButton", connect_database), ("Load Excel", "White.TButton", load_excel_file), ("Load CSV", "White.TButton", load_csv_file)]),
-        ("Decision Support", [("Model Comparison", "White.TButton"), ("Report", "White.TButton"), ("Guidelines", "White.TButton")])
+        ("Decision Support", [("Model Comparison", "White.TButton"), ("Schedule Mammogram", "White.TButton"), ("Guidelines", "White.TButton")])
     ]:
         lf, lf_content = create_modern_frame(top_frame, frame_name)
         lf.pack(side="left", expand=True, fill="both", padx=5)
