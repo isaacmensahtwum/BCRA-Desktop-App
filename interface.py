@@ -348,7 +348,7 @@ def create_app():
     top_frame.pack(fill="x", padx=20)
     for frame_name, buttons in [
         ("Risk Calculator", [("BCRA Model", "Pink.TButton"), ("Tyrer-Cuzick Model", "White.TButton"), ("BOADICEA Model", "White.TButton")]),
-        ("Data Source", [("Connect to DB", "White.TButton", connect_database), ("Load Excel", "White.TButton", load_excel_file), ("Load CSV", "White.TButton", load_csv_file)]),
+        ("Data Source", [("EHR Database", "White.TButton", connect_database), ("Import Excel", "White.TButton", load_excel_file), ("Import CSV", "White.TButton", load_csv_file)]),
         ("Decision Support", [("Model Comparison", "White.TButton"), ("Schedule Mammogram", "White.TButton"), ("Guidelines", "White.TButton")])
     ]:
         lf, lf_content = create_modern_frame(top_frame, frame_name)
@@ -378,7 +378,7 @@ def create_app():
     create_styled_button(save_content, "Save as Excel", "White.TButton", command=save_all_excel)
     create_styled_button(save_content, "Save as CSV", "White.TButton", command=save_all_csv)
     create_styled_button(save_content, "Save as PDF", "White.TButton", command=save_all_pdf)
-    create_styled_button(save_content, "Export to Database", "White.TButton", command=export_all_db)
+    create_styled_button(save_content, "Export to EHR Database", "White.TButton", command=export_all_db)
 
     # Table area
     table_frame = tk.Frame(root, bg="#f4f6f8")
