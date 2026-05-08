@@ -32,7 +32,6 @@ def setup_dbs():
         print(f"Error encountered during DB setup: {e}")
         return None, None
 
-
 def close_db_connections():
     print("Closing DB connections")
     try:
@@ -43,7 +42,6 @@ def close_db_connections():
             print("No connection to close.")
     except Exception as e:
         print(f"Error occurred while closing DB connection: {e}")
-
 
 if __name__ == "__main__":
     setup_dbs()
