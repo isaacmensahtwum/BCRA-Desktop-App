@@ -1,3 +1,4 @@
+##Not Main
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, Toplevel, Label, Entry, Button
 import os
