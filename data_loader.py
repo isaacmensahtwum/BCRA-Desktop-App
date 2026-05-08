@@ -12,3 +12,4 @@ def load_from_sql(query="SELECT * FROM [bcra].[dbo].exampledata;"):
     df = pd.read_sql(query, db.conns)
     db.close_db_connections()
     return df
+
