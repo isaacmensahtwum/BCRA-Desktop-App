@@ -1,5 +1,5 @@
 import os
-os.environ["R_Home"] = "C:/Program Files/R/R-4.4.2"
+os.environ["R_Home"] = "C:/Program Files/R/R-4.6.0"
 
 import pandas as pd
 import rpy2.robjects as ro
